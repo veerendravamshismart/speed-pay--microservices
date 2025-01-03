@@ -1,0 +1,289 @@
+# Documentation: Setting up a Go Application with PostgreSQL, SQLC, Redis, and Dragonfly
+
+## Prerequisites
+
+- Install Docker and Docker Compose.
+- Basic understanding of Docker, SQL, and Go.
+
+---
+
+## Step 1: Setting Up Services in Docker
+
+### Docker Compose Configuration
+
+Create a `docker-compose.yml` file to define services for PostgreSQL, Redis (client), and Dragonfly.
+
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: exampledb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: dragonfly
+    command: ["--cache-only", "--redis-port=6379"]
+    ports:
+      - "6380:6379"
+
+volumes:
+  postgres_data:Documentation: Setting up a Go Application with PostgreSQL, SQLC, Redis, and Dragonfly
+Prerequisites
+
+    Install Docker and Docker Compose.
+
+    Basic understanding of Docker, SQL, and Go.
+
+Step 1: Setting Up Services in Docker
+Docker Compose Configuration
+
+Create a docker-compose.yml file to define services for PostgreSQL, Redis (client), and Dragonfly.
+
+
+### Start Services
+
+Run the following command to start the containers:
+
+docker-compose up -d
+
+---
+
+## Step 2: Initialize the PostgreSQL Database
+
+### Access PostgreSQL
+
+Run the following command to access the PostgreSQL container:
+
+docker exec -it postgres psql -U user -d exampledb
+
+
+### Create Tables and Insert Data
+
+Create a `schema.sql` file with the following content:
+
+  sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL
+);
+
+INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com');
+
+
+Load the schema into PostgreSQL:
+
+docker cp schema.sql postgres:/schema.sql
+docker exec -it postgres psql -U user -d exampledb -f /schema.sql
+
+---
+
+## Step 3: Set Up SQLC for Code Generation
+
+### Install SQLC
+
+Install SQLC in your local environment:
+
+curl -sSL https://github.com/kyleconroy/sqlc/releases/download/v1.16.0/sqlc_1.16.0_linux_amd64.tar.gz | tar -xvzf - -C /usr/local/bin
+
+### Configure SQLC
+
+Create a `sqlc.yaml` file:
+
+   yaml
+version: "1"
+packages:
+  - name: "db"
+    path: "internal/db"
+    queries: "queries.sql"
+    schema: "schema.sql"
+    engine: "postgresql"
+
+### Write Queries
+
+Create a `queries.sql` file:
+ 
+ sql
+-- name: GetUser :one
+SELECT * FROM users WHERE id = $1;
+
+-- name: CreateUser :one
+INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id;
+
+### Generate SQLC Code
+
+Run the following command to generate Go code:
+
+sqlc generate
+```
+
+---
+
+## Step 4: Build the Go Application
+
+### Create the Project Structure
+
+Organize your project as follows:
+
+```
+project/
+├── cmd/
+│   └── main.go
+├── internal/
+│   ├── db/  # SQLC generated files
+│   ├── handlers/  # API Handlers
+│   └── services/  # Business logic
+├── go.mod
+├── sqlc.yaml
+├── queries.sql
+└── schema.sql
+```
+
+### Write the Main Application
+
+Create `cmd/main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"database/sql"
+	"log"
+	"net/http"
+
+	_ "github.com/lib/pq"
+	"project/internal/handlers"
+)
+
+func main() {
+	db, err := sql.Open("postgres", "postgres://user:password@localhost:5432/exampledb?sslmode=disable")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	handler := handlers.NewHandler(db)
+
+	http.HandleFunc("/user", handler.GetUserHandler)
+	log.Println("Server is running on port 8080")
+	http.ListenAndServe(":8080", nil)
+}
+```
+
+### Create Handlers
+
+Create `internal/handlers/handlers.go`:
+
+```go
+package handlers
+
+import (
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"project/internal/db"
+)
+
+type Handler struct {
+	db *sql.DB
+}
+
+func NewHandler(db *sql.DB) *Handler {
+	return &Handler{db: db}
+}
+
+func (h *Handler) GetUserHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing id parameter", http.StatusBadRequest)
+		return
+	}
+
+	queries := db.New(h.db)
+	user, err := queries.GetUser(context.Background(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(user)
+}
+```
+
+---
+
+## Step 5: Modularize the Code
+
+### Move SQLC Code
+
+The SQLC code is already generated in `internal/db`. Use these functions for all database interactions.
+
+### Separate Services
+
+Create a `services` package to handle business logic and keep handlers clean:
+
+```go
+package services
+
+import (
+	"context"
+	"project/internal/db"
+)
+
+type UserService struct {
+	queries *db.Queries
+}
+
+func NewUserService(queries *db.Queries) *UserService {
+	return &UserService{queries: queries}
+}
+
+func (s *UserService) GetUser(ctx context.Context, id int32) (db.User, error) {
+	return s.queries.GetUser(ctx, id)
+}
+```
+
+---
+
+## Step 6: Test and Run
+
+### Run the Application
+
+Start the Go application:
+
+```bash
+go run cmd/main.go
+```
+
+### Access the API
+
+Use cURL or Postman to test the endpoint:
+
+```bash
+curl http://localhost:8080/operator/2
+```
+
+---
+
+## Conclusion
+
+This setup uses Docker to manage PostgreSQL, Redis, and Dragonfly, SQLC for type-safe database queries, and a modular Go code structure. You can expand on this by adding more endpoints, services, and unit tests to fully build out your application.
+
+hey&#x20;
