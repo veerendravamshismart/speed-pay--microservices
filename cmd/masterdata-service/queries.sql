@@ -1,26 +1,57 @@
--- name: GetAllRegions :many
-SELECT id, name
-FROM regions;
+-- name: GetAllCountries :many
+-- Get all countries from tbl_countries
+-- Retrieves all countries
+-- Arguments: None
+SELECT * FROM tbl_countries;
 
--- name: GetAllCurrencies :many
-SELECT id, name, code
-FROM currencies;
+-- name: GetAllRegions :many
+-- Get all regions
+-- Retrieves all regions
+SELECT * FROM tbl_regions;
+
+-- name: GetAllCities :many
+-- Get all cities
+-- Retrieves all cities
+SELECT * FROM tbl_cities;
 
 -- name: GetAllAreas :many
-SELECT areas.id AS area_id, areas.country_name, areas.country_code, 
-       regions.name AS region_name, currencies.name AS currency_name
-FROM areas
-JOIN regions ON areas.region_id = regions.id
-JOIN currencies ON areas.currency_id = currencies.id;
+-- Get all areas
+-- Retrieves all areas
+SELECT * FROM tbl_areas;
+
+-- name: GetAllCurrencies :many
+-- Get all currencies
+-- Retrieves all currencies
+
+SELECT * FROM tbl_currencies;
 
 -- name: GetCountryByID :one
-SELECT countries.id AS country_id, areas.country_name, areas.country_code, 
-       regions.name AS region_name, currencies.name AS currency_name
-FROM countries
-JOIN areas ON countries.area_id = areas.id
-JOIN regions ON areas.region_id = regions.id
-JOIN currencies ON areas.currency_id = currencies.id
-WHERE countries.id = $1;
+-- Get a specific country by its ID
+-- Retrieves a single country based on country_id
+-- Arguments: country_id
+SELECT * FROM tbl_countries WHERE country_id = $1;
 
--- name: CreateCountry :exec
-INSERT INTO countries (area_id) VALUES ($1);
+-- name: GetCurrencyByID :one
+-- Get a specific currency by its ID
+-- Retrieves a specific currency based on currency_id
+-- Arguments: currency_id
+SELECT * FROM tbl_currencies WHERE currency_id = $1;
+
+-- name: GetRegionsByCountryID :many
+-- Get regions by country ID
+-- Retrieves regions based on country_id
+-- Arguments: country_id
+SELECT * FROM tbl_regions WHERE country_id = $1;
+
+-- name: GetCitiesByRegionID :many
+-- Get cities by region ID
+-- Retrieves cities based on region_id
+-- Arguments: region_id
+SELECT * FROM tbl_cities WHERE region_id = $1;
+
+-- name: GetAreasByCityID :many
+-- Get areas by city ID
+-- Retrieves areas based on city_id
+-- Arguments: city_id
+SELECT * FROM tbl_areas WHERE city_id = $1;
+

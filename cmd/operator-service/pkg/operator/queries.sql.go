@@ -7,52 +7,111 @@ package operator
 
 import (
 	"context"
+	"database/sql"
 )
 
-const createOperator = `-- name: CreateOperator :exec
-INSERT INTO operators (name, country, status)
-VALUES ($1, $2, $3)
-RETURNING id, name, country, status
+const createOperator = `-- name: CreateOperator :one
+INSERT INTO tbl_operator (
+    country_id, operator_code, operator_logo, operator_name, inserted_date, inserted_user,
+    last_modified_date, last_modified_user, remarks, status, currency_id, service_type_codes,
+    validation_regex, operator_sync_code, operator_sync_code2, print_template_id, service_type_id,
+    country_name, currency_code
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+RETURNING operator_id
 `
 
 type CreateOperatorParams struct {
-	Name    string
-	Country string
-	Status  string
+	CountryID         sql.NullInt32
+	OperatorCode      sql.NullString
+	OperatorLogo      sql.NullString
+	OperatorName      sql.NullString
+	InsertedDate      sql.NullTime
+	InsertedUser      sql.NullInt32
+	LastModifiedDate  sql.NullTime
+	LastModifiedUser  sql.NullInt32
+	Remarks           sql.NullString
+	Status            sql.NullInt32
+	CurrencyID        sql.NullInt32
+	ServiceTypeCodes  sql.NullString
+	ValidationRegex   sql.NullString
+	OperatorSyncCode  sql.NullString
+	OperatorSyncCode2 sql.NullString
+	PrintTemplateID   sql.NullInt32
+	ServiceTypeID     sql.NullInt32
+	CountryName       sql.NullString
+	CurrencyCode      sql.NullString
 }
 
-func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) error {
-	_, err := q.db.ExecContext(ctx, createOperator, arg.Name, arg.Country, arg.Status)
-	return err
-}
-
-const deleteOperator = `-- name: DeleteOperator :exec
-DELETE FROM operators WHERE id = $1
-`
-
-func (q *Queries) DeleteOperator(ctx context.Context, id int32) error {
-	_, err := q.db.ExecContext(ctx, deleteOperator, id)
-	return err
+// Insert a new operator and return the operator_id
+// Arguments: country_id, operator_code, operator_logo, operator_name, inserted_date, inserted_user,
+//
+//	last_modified_date, last_modified_user, remarks, status, currency_id, service_type_codes,
+//	validation_regex, operator_sync_code, operator_sync_code2, print_template_id, service_type_id,
+//	country_name, currency_code
+func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, createOperator,
+		arg.CountryID,
+		arg.OperatorCode,
+		arg.OperatorLogo,
+		arg.OperatorName,
+		arg.InsertedDate,
+		arg.InsertedUser,
+		arg.LastModifiedDate,
+		arg.LastModifiedUser,
+		arg.Remarks,
+		arg.Status,
+		arg.CurrencyID,
+		arg.ServiceTypeCodes,
+		arg.ValidationRegex,
+		arg.OperatorSyncCode,
+		arg.OperatorSyncCode2,
+		arg.PrintTemplateID,
+		arg.ServiceTypeID,
+		arg.CountryName,
+		arg.CurrencyCode,
+	)
+	var operator_id int32
+	err := row.Scan(&operator_id)
+	return operator_id, err
 }
 
 const getAllOperators = `-- name: GetAllOperators :many
-SELECT id, name, country, status FROM operators
+SELECT operator_id, country_id, operator_code, operator_logo, operator_name, inserted_date, inserted_user, last_modified_date, last_modified_user, remarks, status, currency_id, service_type_codes, validation_regex, operator_sync_code, operator_sync_code2, print_template_id, service_type_id, country_name, currency_code FROM tbl_operator
 `
 
-func (q *Queries) GetAllOperators(ctx context.Context) ([]Operator, error) {
+// Get all operators
+// Arguments: None
+func (q *Queries) GetAllOperators(ctx context.Context) ([]TblOperator, error) {
 	rows, err := q.db.QueryContext(ctx, getAllOperators)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Operator
+	var items []TblOperator
 	for rows.Next() {
-		var i Operator
+		var i TblOperator
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Country,
+			&i.OperatorID,
+			&i.CountryID,
+			&i.OperatorCode,
+			&i.OperatorLogo,
+			&i.OperatorName,
+			&i.InsertedDate,
+			&i.InsertedUser,
+			&i.LastModifiedDate,
+			&i.LastModifiedUser,
+			&i.Remarks,
 			&i.Status,
+			&i.CurrencyID,
+			&i.ServiceTypeCodes,
+			&i.ValidationRegex,
+			&i.OperatorSyncCode,
+			&i.OperatorSyncCode2,
+			&i.PrintTemplateID,
+			&i.ServiceTypeID,
+			&i.CountryName,
+			&i.CurrencyCode,
 		); err != nil {
 			return nil, err
 		}
@@ -68,41 +127,139 @@ func (q *Queries) GetAllOperators(ctx context.Context) ([]Operator, error) {
 }
 
 const getOperatorByID = `-- name: GetOperatorByID :one
-SELECT id, name, country, status FROM operators WHERE id = $1
+SELECT operator_id, country_id, operator_code, operator_logo, operator_name, inserted_date, inserted_user, last_modified_date, last_modified_user, remarks, status, currency_id, service_type_codes, validation_regex, operator_sync_code, operator_sync_code2, print_template_id, service_type_id, country_name, currency_code FROM tbl_operator WHERE operator_id = $1
 `
 
-func (q *Queries) GetOperatorByID(ctx context.Context, id int32) (Operator, error) {
-	row := q.db.QueryRowContext(ctx, getOperatorByID, id)
-	var i Operator
+// Get a specific operator by its operator_id
+// Arguments: operator_id
+func (q *Queries) GetOperatorByID(ctx context.Context, operatorID int32) (TblOperator, error) {
+	row := q.db.QueryRowContext(ctx, getOperatorByID, operatorID)
+	var i TblOperator
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Country,
+		&i.OperatorID,
+		&i.CountryID,
+		&i.OperatorCode,
+		&i.OperatorLogo,
+		&i.OperatorName,
+		&i.InsertedDate,
+		&i.InsertedUser,
+		&i.LastModifiedDate,
+		&i.LastModifiedUser,
+		&i.Remarks,
 		&i.Status,
+		&i.CurrencyID,
+		&i.ServiceTypeCodes,
+		&i.ValidationRegex,
+		&i.OperatorSyncCode,
+		&i.OperatorSyncCode2,
+		&i.PrintTemplateID,
+		&i.ServiceTypeID,
+		&i.CountryName,
+		&i.CurrencyCode,
 	)
 	return i, err
 }
 
-const updateOperator = `-- name: UpdateOperator :exec
-UPDATE operators
-SET name = $1, country = $2, status = $3
-WHERE id = $4
-RETURNING id, name, country, status
+const updateOperator = `-- name: UpdateOperator :one
+UPDATE tbl_operator
+SET
+    country_id = $2,
+    operator_code = $3,
+    operator_logo = $4,
+    operator_name = $5,
+    inserted_date = $6,
+    inserted_user = $7,
+    last_modified_date = $8,
+    last_modified_user = $9,
+    remarks = $10,
+    status = $11,
+    currency_id = $12,
+    service_type_codes = $13,
+    validation_regex = $14,
+    operator_sync_code = $15,
+    operator_sync_code2 = $16,
+    print_template_id = $17,
+    service_type_id = $18,
+    country_name = $19,
+    currency_code = $20
+WHERE operator_id = $1
+RETURNING operator_id
 `
 
 type UpdateOperatorParams struct {
-	Name    string
-	Country string
-	Status  string
-	ID      int32
+	OperatorID        int32
+	CountryID         sql.NullInt32
+	OperatorCode      sql.NullString
+	OperatorLogo      sql.NullString
+	OperatorName      sql.NullString
+	InsertedDate      sql.NullTime
+	InsertedUser      sql.NullInt32
+	LastModifiedDate  sql.NullTime
+	LastModifiedUser  sql.NullInt32
+	Remarks           sql.NullString
+	Status            sql.NullInt32
+	CurrencyID        sql.NullInt32
+	ServiceTypeCodes  sql.NullString
+	ValidationRegex   sql.NullString
+	OperatorSyncCode  sql.NullString
+	OperatorSyncCode2 sql.NullString
+	PrintTemplateID   sql.NullInt32
+	ServiceTypeID     sql.NullInt32
+	CountryName       sql.NullString
+	CurrencyCode      sql.NullString
 }
 
-func (q *Queries) UpdateOperator(ctx context.Context, arg UpdateOperatorParams) error {
-	_, err := q.db.ExecContext(ctx, updateOperator,
-		arg.Name,
-		arg.Country,
+// Update the details of a specific operator
+// Arguments: operator_id, country_id, operator_code, operator_logo, operator_name, inserted_date, inserted_user,
+//
+//	last_modified_date, last_modified_user, remarks, status, currency_id, service_type_codes,
+//	validation_regex, operator_sync_code, operator_sync_code2, print_template_id, service_type_id,
+//	country_name, currency_code
+func (q *Queries) UpdateOperator(ctx context.Context, arg UpdateOperatorParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, updateOperator,
+		arg.OperatorID,
+		arg.CountryID,
+		arg.OperatorCode,
+		arg.OperatorLogo,
+		arg.OperatorName,
+		arg.InsertedDate,
+		arg.InsertedUser,
+		arg.LastModifiedDate,
+		arg.LastModifiedUser,
+		arg.Remarks,
 		arg.Status,
-		arg.ID,
+		arg.CurrencyID,
+		arg.ServiceTypeCodes,
+		arg.ValidationRegex,
+		arg.OperatorSyncCode,
+		arg.OperatorSyncCode2,
+		arg.PrintTemplateID,
+		arg.ServiceTypeID,
+		arg.CountryName,
+		arg.CurrencyCode,
 	)
-	return err
+	var operator_id int32
+	err := row.Scan(&operator_id)
+	return operator_id, err
+}
+
+const updateOperatorStatus = `-- name: UpdateOperatorStatus :one
+UPDATE tbl_operator
+SET status = $1
+WHERE operator_id = $2
+RETURNING operator_id
+`
+
+type UpdateOperatorStatusParams struct {
+	Status     sql.NullInt32
+	OperatorID int32
+}
+
+// Update the status of a specific operator by its operator_id
+// Arguments: status, operator_id
+func (q *Queries) UpdateOperatorStatus(ctx context.Context, arg UpdateOperatorStatusParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, updateOperatorStatus, arg.Status, arg.OperatorID)
+	var operator_id int32
+	err := row.Scan(&operator_id)
+	return operator_id, err
 }

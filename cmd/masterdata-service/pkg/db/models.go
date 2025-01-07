@@ -4,26 +4,45 @@
 
 package db
 
-type Area struct {
-	ID          int32
-	RegionID    int32
-	CountryName string
-	CountryCode string
-	CurrencyID  int32
+import (
+	"database/sql"
+)
+
+type TblArea struct {
+	AreaID   int32
+	AreaName sql.NullString
+	CityID   sql.NullInt32
 }
 
-type Country struct {
-	ID     int32
-	AreaID int32
+type TblCity struct {
+	CityID   int32
+	CityName sql.NullString
+	RegionID sql.NullInt32
 }
 
-type Currency struct {
-	ID   int32
-	Name string
-	Code string
+type TblCountry struct {
+	CountryID         int32
+	CountryName       sql.NullString
+	CountryCode       sql.NullString
+	CallingCode       sql.NullString
+	CountryAlphaCode3 sql.NullString
+	Region            sql.NullString
+	FlagUrl           sql.NullString
+	NumMaxlength      sql.NullInt32
+	NumMinlength      sql.NullInt32
+	Status            sql.NullInt32
+	CurrencyIDTemp    sql.NullInt32
 }
 
-type Region struct {
-	ID   int32
-	Name string
+type TblCurrency struct {
+	CurrencyID   int32
+	CurrencyName sql.NullString
+	CurrencyCode sql.NullString
+	CountryID    sql.NullInt32
+}
+
+type TblRegion struct {
+	RegionID   int32
+	CountryID  sql.NullInt32
+	RegionName sql.NullString
 }

@@ -1,16 +1,288 @@
+// package rest
+
+// import (
+// 	"context"
+// 	"database/sql"
+// 	"encoding/json"
+// 	"net/http"
+// 	"strconv"
+// 	"time"
+
+// 	"github.com/gin-gonic/gin"
+// 	"github.com/go-redis/redis/v8" // Redis/Dragonfly client
+// 	"github.com/speedpay/cmd/operator-service/pkg/operator"
+// 	"go.uber.org/zap"
+// )
+
+// // operator_controller.go
+
+// type OperatorController struct {
+// 	db          *operator.Queries
+// 	log         *zap.SugaredLogger
+// 	redisClient *redis.Client
+// }
+
+// func NewOperatorController(db *operator.Queries, log *zap.SugaredLogger, redisClient *redis.Client) *OperatorController {
+// 	return &OperatorController{
+// 		db:          db,
+// 		log:         log,
+// 		redisClient: redisClient,
+// 	}
+// }
+
+// // RegisterRoutes registers the routes for the operator controller
+// func (ctrl *OperatorController) RegisterRoutes(router *gin.Engine) {
+// 	router.POST("/new-operator", ctrl.createOperator)
+// 	router.GET("/get-operators", ctrl.getAllOperators)
+// 	router.GET("/get-operator/:id", ctrl.getOperatorByID)
+// 	router.PUT("/update-operator-status/", ctrl.updateOperatorStatus)
+// 	router.PUT("/update-operator/", ctrl.updateOperator)
+// }
+
+// // createOperator creates a new operator in the database
+// func (ctrl *OperatorController) createOperator(c *gin.Context) {
+// 	var req operator.CreateOperatorParams
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		ctrl.log.Errorf("Invalid request: %v", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+// 		return
+// 	}
+
+// 	// Insert operator into DB
+// 	operatorID, err := ctrl.db.CreateOperator(context.Background(), req)
+// 	if err != nil {
+// 		ctrl.log.Errorf("Failed to create operator: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create operator"})
+// 		return
+// 	}
+
+// 	// Clear Redis cache
+// 	ctrl.redisClient.Del(context.Background(), "operators")
+// 	c.JSON(http.StatusCreated, gin.H{"operator_id": operatorID})
+// }
+
+// // getAllOperators retrieves all operators from the database or cache
+// func (ctrl *OperatorController) getAllOperators(c *gin.Context) {
+// 	ctrl.log.Info("Fetching all operators")
+
+// 	// Check Redis Cache first
+// 	cachedData, err := ctrl.redisClient.Get(context.Background(), "operators").Result()
+// 	if err == redis.Nil {
+// 		ctrl.log.Infof("Cache hit for regions")
+
+// 		// Cache miss - Fetch from DB
+// 		operators, err := ctrl.db.GetAllOperators(context.Background())
+// 		if err != nil {
+// 			ctrl.log.Errorf("Failed to fetch operators from DB: %v", err)
+// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch operators"})
+// 			return
+// 		}
+
+// 		// Cache the data for 30 minutes
+// 		operatorsJSON, err := json.Marshal(operators)
+// 		if err != nil {
+// 			ctrl.log.Errorf("Failed to serialize operators: %v", err)
+// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize operators"})
+// 			return
+// 		}
+// 		ctrl.redisClient.Set(context.Background(), "operators", operatorsJSON, 30*time.Minute)
+
+// 		// Return the operators
+// 		c.JSON(http.StatusOK, operators)
+// 		return
+// 	} else if err != nil {
+// 		ctrl.log.Errorf("Error accessing Redis cache: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error accessing cache"})
+// 		return
+// 	}
+
+// 	// Cache hit - Deserialize and return the data
+// 	var cachedOperators []operator.TblOperator
+// 	if err := json.Unmarshal([]byte(cachedData), &cachedOperators); err != nil {
+// 		ctrl.log.Errorf("Failed to deserialize operators: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operators"})
+// 		return
+// 	}
+
+// 	c.JSON(http.StatusOK, cachedOperators)
+// }
+
+// // getOperatorByID retrieves a specific operator by its ID
+// func (ctrl *OperatorController) getOperatorByID(c *gin.Context) {
+// 	id, err := strconv.Atoi(c.Param("id"))
+// 	if err != nil {
+// 		ctrl.log.Errorf("Invalid ID: %v", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+// 		return
+// 	}
+
+// 	// Check Redis cache for the operator
+// 	cacheKey := "operator:" + strconv.Itoa(id)
+// 	cachedData, err := ctrl.redisClient.Get(context.Background(), cacheKey).Result()
+// 	if err == redis.Nil {
+// 		// Cache miss - Fetch from DB
+// 		operator, err := ctrl.db.GetOperatorByID(context.Background(), int32(id))
+// 		if err != nil {
+// 			ctrl.log.Errorf("Failed to fetch operator with ID %d: %v", id, err)
+// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch operator"})
+// 			return
+// 		}
+
+// 		// Cache operator data
+// 		operatorJSON, err := json.Marshal(operator)
+// 		if err != nil {
+// 			ctrl.log.Errorf("Failed to serialize operator: %v", err)
+// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize operator"})
+// 			return
+// 		}
+// 		ctrl.redisClient.Set(context.Background(), cacheKey, operatorJSON, 30*time.Minute)
+// 		c.JSON(http.StatusOK, operator)
+// 		return
+// 	} else if err != nil {
+// 		ctrl.log.Errorf("Error accessing Redis cache: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error accessing cache"})
+// 		return
+// 	}
+
+// 	var cachedOperator operator.TblOperator
+// 	if err := json.Unmarshal([]byte(cachedData), &cachedOperator); err != nil {
+// 		ctrl.log.Errorf("Failed to deserialize operator: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operator"})
+// 		return
+// 	}
+
+// 	c.JSON(http.StatusOK, cachedOperator)
+// }
+
+// func (ctrl *OperatorController) updateOperatorStatus(c *gin.Context) {
+// 	var req struct {
+// 		OperatorID string `json:"operatorId"` // ID as string to match user input
+// 		Status     string `json:"status"`     // Status to update
+// 	}
+
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		ctrl.log.Errorf("Invalid request: %v", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+// 		return
+// 	}
+
+// 	id, err := strconv.Atoi(req.OperatorID)
+// 	if err != nil {
+// 		ctrl.log.Errorf("Invalid ID: %v", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+// 		return
+// 	}
+
+// 	var status sql.NullInt32
+// 	if req.Status == "" {
+// 		status = sql.NullInt32{Valid: false} // NULL value
+// 	} else {
+// 		statusInt, err := strconv.Atoi(req.Status)
+// 		if err != nil {
+// 			ctrl.log.Errorf("Invalid status value: %v", err)
+// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
+// 			return
+// 		}
+// 		status = sql.NullInt32{Int32: int32(statusInt), Valid: true}
+// 	}
+
+// 	params := operator.UpdateOperatorStatusParams{
+// 		Status:     status,
+// 		OperatorID: int32(id),
+// 	}
+
+// 	// Perform the status update
+// 	operatorID, err := ctrl.db.UpdateOperatorStatus(context.Background(), params)
+// 	if err != nil {
+// 		ctrl.log.Errorf("Failed to update operator status: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update operator status"})
+// 		return
+// 	}
+
+// 	// Optionally clear caches or handle other post-update tasks
+// 	ctrl.redisClient.Del(context.Background(), "operators")
+// 	ctrl.redisClient.Del(context.Background(), "operator:"+strconv.Itoa(id))
+
+// 	c.JSON(http.StatusOK, gin.H{"operator_id": operatorID})
+// }
+
+// // updateOperator updates the operator details using data from the request body
+// func (ctrl *OperatorController) updateOperator(c *gin.Context) {
+// 	var req struct {
+// 		OperatorID   string `json:"operatorId"`
+// 		OperatorName string `json:"operatorName"`
+// 		Status       string `json:"status"`
+// 	}
+
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		ctrl.log.Errorf("Invalid request: %v", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+// 		return
+// 	}
+
+// 	id, err := strconv.Atoi(req.OperatorID)
+// 	if err != nil {
+// 		ctrl.log.Errorf("Invalid ID: %v", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+// 		return
+// 	}
+
+// 	// Convert OperatorName to sql.NullString
+// 	operatorName := sql.NullString{String: req.OperatorName, Valid: req.OperatorName != ""}
+
+// 	// Prepare status
+// 	var status sql.NullInt32
+// 	if req.Status == "" {
+// 		status = sql.NullInt32{Valid: false} // NULL value for status
+// 	} else {
+// 		statusInt, err := strconv.Atoi(req.Status)
+// 		if err != nil {
+// 			ctrl.log.Errorf("Invalid status value: %v", err)
+// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
+// 			return
+// 		}
+// 		status = sql.NullInt32{Int32: int32(statusInt), Valid: true}
+// 	}
+
+// 	// Prepare parameters for updating the operator
+// 	params := operator.UpdateOperatorParams{
+// 		OperatorID:   int32(id),
+// 		OperatorName: operatorName,
+// 		Status:       status,
+// 	}
+
+// 	// Perform the update operation
+// 	operatorID, err := ctrl.db.UpdateOperator(context.Background(), params)
+// 	if err != nil {
+// 		ctrl.log.Errorf("Failed to update operator: %v", err)
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update operator"})
+// 		return
+// 	}
+
+// 	// Clear Redis cache
+// 	ctrl.redisClient.Del(context.Background(), "operators")
+// 	ctrl.redisClient.Del(context.Background(), "operator:"+strconv.Itoa(id))
+
+// 	c.JSON(http.StatusOK, gin.H{"operator_id": operatorID})
+// }
+
 package rest
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
-	"github.com/speedpay/cmd/operator-service/pkg/operator"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8" // Redis/Dragonfly client
+	"github.com/speedpay/cmd/operator-service/pkg/operator"
 	"go.uber.org/zap"
 )
+
+// operator_controller.go
 
 type OperatorController struct {
 	db          *operator.Queries
@@ -18,7 +290,6 @@ type OperatorController struct {
 	redisClient *redis.Client
 }
 
-// NewOperatorController creates a new instance of OperatorController
 func NewOperatorController(db *operator.Queries, log *zap.SugaredLogger, redisClient *redis.Client) *OperatorController {
 	return &OperatorController{
 		db:          db,
@@ -29,11 +300,11 @@ func NewOperatorController(db *operator.Queries, log *zap.SugaredLogger, redisCl
 
 // RegisterRoutes registers the routes for the operator controller
 func (ctrl *OperatorController) RegisterRoutes(router *gin.Engine) {
-	router.POST("/operators", ctrl.createOperator)
-	router.GET("/operators", ctrl.getAllOperators)
-	router.GET("/operators/:id", ctrl.getOperatorByID)
-	router.PUT("/operators/:id", ctrl.updateOperator)
-	router.DELETE("/operators/:id", ctrl.deleteOperator)
+	router.POST("/new-operator", ctrl.createOperator)
+	router.GET("/get-operators", ctrl.getAllOperators)
+	router.GET("/get-operator/:id", ctrl.getOperatorByID)
+	router.PUT("/update-operator-status/", ctrl.updateOperatorStatus)
+	router.PUT("/update-operator/", ctrl.updateOperator)
 }
 
 // createOperator creates a new operator in the database
@@ -45,207 +316,225 @@ func (ctrl *OperatorController) createOperator(c *gin.Context) {
 		return
 	}
 
-	if err := ctrl.db.CreateOperator(context.Background(), req); err != nil {
+	// Insert operator into DB
+	operatorID, err := ctrl.db.CreateOperator(context.Background(), req)
+	if err != nil {
 		ctrl.log.Errorf("Failed to create operator: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create operator"})
 		return
 	}
 
-	// Clear the cached data in Dragonfly (Redis)
+	// Clear Redis cache
 	ctrl.redisClient.Del(context.Background(), "operators")
-
-	c.JSON(http.StatusCreated, gin.H{"message": "Operator created successfully"})
+	c.JSON(http.StatusCreated, gin.H{"operator_id": operatorID})
 }
 
+// getAllOperators retrieves all operators from the database or cache
 func (ctrl *OperatorController) getAllOperators(c *gin.Context) {
-	// Log the start of the function execution
 	ctrl.log.Info("Fetching all operators")
 
-	// First check if the data is available in cache
-	ctrl.log.Info("Checking Redis cache for operators")
-	cachedData, err := ctrl.redisClient.Get(c, "operators").Result()
-
+	// Check Redis Cache first
+	cachedData, err := ctrl.redisClient.Get(context.Background(), "operators").Result()
 	if err == redis.Nil {
-		// Data not found in cache, fetch from the database
-		ctrl.log.Info("Cache miss, fetching operators from the database")
+		ctrl.log.Info("Cache miss for operators")
 
+		// Cache miss - Fetch from DB
 		operators, err := ctrl.db.GetAllOperators(context.Background())
 		if err != nil {
-			// Log the database error
 			ctrl.log.Errorf("Failed to fetch operators from DB: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch operators from database"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch operators"})
 			return
 		}
 
-		// Log successful database retrieval
-		ctrl.log.Infof("Successfully fetched %d operators from the database", len(operators))
-
-		// Serialize the result into JSON before caching
-		operatorsJson, err := json.Marshal(operators)
+		// Cache the data for 30 minutes
+		operatorsJSON, err := json.Marshal(operators)
 		if err != nil {
-			// Log serialization error
 			ctrl.log.Errorf("Failed to serialize operators: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize operators"})
 			return
 		}
+		ctrl.redisClient.Set(context.Background(), "operators", operatorsJSON, 30*time.Minute)
 
-		// Log successful serialization
-		ctrl.log.Info("Successfully serialized operators into JSON")
-
-		// Cache the result in Dragonfly (Redis)
-		err = ctrl.redisClient.Set(context.Background(), "operators", operatorsJson, 0).Err()
-		if err != nil {
-			// Log error if cache operation fails
-			ctrl.log.Errorf("Failed to set operators cache in Redis: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set operators cache"})
-			return
-		}
-
-		// Log successful caching
-		ctrl.log.Info("Successfully cached operators in Redis")
-
-		// Respond with the data
+		// Return the operators
 		c.JSON(http.StatusOK, operators)
 		return
 	} else if err != nil {
-		// Handle Redis errors (e.g., connection issues)
 		ctrl.log.Errorf("Error accessing Redis cache: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error accessing cache"})
 		return
 	}
 
-	// Log cache hit
-	ctrl.log.Info("Cache hit, deserializing operators from cache")
-
-	// If cache exists, deserialize the cached data
-	var cachedOperators []operator.Operator // Assuming operator.Operator is the struct type
+	// Cache hit - Deserialize and return the data
+	ctrl.log.Info("Cache hit for operators")
+	var cachedOperators []operator.TblOperator
 	if err := json.Unmarshal([]byte(cachedData), &cachedOperators); err != nil {
-		// Log deserialization error
-		ctrl.log.Errorf("Failed to deserialize operators from cache: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operators from cache"})
+		ctrl.log.Errorf("Failed to deserialize operators: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operators"})
 		return
 	}
 
-	// Log successful deserialization
-	ctrl.log.Info("Successfully deserialized operators from cache")
-
-	// Respond with the cached data
 	c.JSON(http.StatusOK, cachedOperators)
 }
+
+// getOperatorByID retrieves a specific operator by its ID
 func (ctrl *OperatorController) getOperatorByID(c *gin.Context) {
-	// Step 1: Parse the ID from the URL parameter
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		// If the ID is not valid, log the error and return a bad request response
 		ctrl.log.Errorf("Invalid ID: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
 
-	// Log the ID being requested
-	ctrl.log.Infof("Fetching operator with ID: %d", id)
-
-	// Step 2: Check the cache first
-	cacheKey := "operator:" + strconv.Itoa(id) // Cache key for the specific operator by ID
-	cachedData, err := ctrl.redisClient.Get(c, cacheKey).Result()
-
+	// Check Redis cache for the operator
+	cacheKey := "operator:" + strconv.Itoa(id)
+	cachedData, err := ctrl.redisClient.Get(context.Background(), cacheKey).Result()
 	if err == redis.Nil {
-		// Cache miss: If the operator is not in cache, fetch from the database
-		ctrl.log.Info("Cache miss for operator ID %d, fetching from database", id)
+		ctrl.log.Infof("Cache miss for operator ID: %d", id)
 
+		// Cache miss - Fetch from DB
 		operator, err := ctrl.db.GetOperatorByID(context.Background(), int32(id))
 		if err != nil {
-			// If the database query fails, log the error and return an internal server error response
 			ctrl.log.Errorf("Failed to fetch operator with ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch operator"})
 			return
 		}
 
-		// Cache the operator data after fetching from the database
-		operatorJson, err := json.Marshal(operator)
+		// Cache operator data
+		operatorJSON, err := json.Marshal(operator)
 		if err != nil {
 			ctrl.log.Errorf("Failed to serialize operator: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize operator"})
 			return
 		}
-
-		// Cache the result in Redis with an expiration time (e.g., 1 hour)
-		ctrl.redisClient.Set(context.Background(), cacheKey, operatorJson, 0) // Set without expiry
-
-		// Log the cache store operation
-		ctrl.log.Infof("Successfully fetched operator ID %d from database and cached it", id)
-
-		// Respond with the operator data
+		ctrl.redisClient.Set(context.Background(), cacheKey, operatorJSON, 30*time.Minute)
 		c.JSON(http.StatusOK, operator)
 		return
 	} else if err != nil {
-		// Handle Redis errors (e.g., connection issues)
 		ctrl.log.Errorf("Error accessing Redis cache: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error accessing cache"})
 		return
 	}
 
-	// Cache hit: If data is found in the cache, deserialize the cached data
-	var cachedOperator operator.Operator
+	// Cache hit - Deserialize and return the data
+	ctrl.log.Infof("Cache hit for operator ID: %d", id)
+	var cachedOperator operator.TblOperator
 	if err := json.Unmarshal([]byte(cachedData), &cachedOperator); err != nil {
-		ctrl.log.Errorf("Failed to deserialize operator from cache: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operator from cache"})
+		ctrl.log.Errorf("Failed to deserialize operator: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operator"})
 		return
 	}
 
-	// Log the cache hit
-	ctrl.log.Infof("Cache hit for operator ID %d, returning data from cache", id)
-
-	// Respond with the cached data
 	c.JSON(http.StatusOK, cachedOperator)
 }
 
-// updateOperator updates an existing operator in the database
-func (ctrl *OperatorController) updateOperator(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		ctrl.log.Errorf("Invalid ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
-		return
+func (ctrl *OperatorController) updateOperatorStatus(c *gin.Context) {
+	var req struct {
+		OperatorID string `json:"operatorId"` // ID as string to match user input
+		Status     string `json:"status"`     // Status to update
 	}
 
-	var req operator.UpdateOperatorParams
 	if err := c.ShouldBindJSON(&req); err != nil {
 		ctrl.log.Errorf("Invalid request: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	req.ID = int32(id)
-	if err := ctrl.db.UpdateOperator(context.Background(), req); err != nil {
-		ctrl.log.Errorf("Failed to update operator: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update operator"})
-		return
-	}
-
-	// Clear the cached data in Dragonfly (Redis)
-	ctrl.redisClient.Del(context.Background(), "operators")
-
-	c.JSON(http.StatusOK, gin.H{"message": "Operator updated successfully"})
-}
-
-// deleteOperator deletes an operator by ID from the database
-func (ctrl *OperatorController) deleteOperator(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(req.OperatorID)
 	if err != nil {
 		ctrl.log.Errorf("Invalid ID: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
 
-	if err := ctrl.db.DeleteOperator(context.Background(), int32(id)); err != nil {
-		ctrl.log.Errorf("Failed to delete operator: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete operator"})
+	var status sql.NullInt32
+	if req.Status == "" {
+		status = sql.NullInt32{Valid: false} // NULL value
+	} else {
+		statusInt, err := strconv.Atoi(req.Status)
+		if err != nil {
+			ctrl.log.Errorf("Invalid status value: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
+			return
+		}
+		status = sql.NullInt32{Int32: int32(statusInt), Valid: true}
+	}
+
+	params := operator.UpdateOperatorStatusParams{
+		Status:     status,
+		OperatorID: int32(id),
+	}
+
+	// Perform the status update
+	operatorID, err := ctrl.db.UpdateOperatorStatus(context.Background(), params)
+	if err != nil {
+		ctrl.log.Errorf("Failed to update operator status: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update operator status"})
 		return
 	}
 
-	// Clear the cached data in Dragonfly (Redis)
+	// Optionally clear caches or handle other post-update tasks
 	ctrl.redisClient.Del(context.Background(), "operators")
+	ctrl.redisClient.Del(context.Background(), "operator:"+strconv.Itoa(id))
 
-	c.JSON(http.StatusOK, gin.H{"message": "Operator deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"operator_id": operatorID})
+}
+
+// updateOperator updates the operator details using data from the request body
+func (ctrl *OperatorController) updateOperator(c *gin.Context) {
+	var req struct {
+		OperatorID   string `json:"operatorId"`
+		OperatorName string `json:"operatorName"`
+		Status       string `json:"status"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ctrl.log.Errorf("Invalid request: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	id, err := strconv.Atoi(req.OperatorID)
+	if err != nil {
+		ctrl.log.Errorf("Invalid ID: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	// Convert OperatorName to sql.NullString
+	operatorName := sql.NullString{String: req.OperatorName, Valid: req.OperatorName != ""}
+
+	// Prepare status
+	var status sql.NullInt32
+	if req.Status == "" {
+		status = sql.NullInt32{Valid: false} // NULL value for status
+	} else {
+		statusInt, err := strconv.Atoi(req.Status)
+		if err != nil {
+			ctrl.log.Errorf("Invalid status value: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
+			return
+		}
+		status = sql.NullInt32{Int32: int32(statusInt), Valid: true}
+	}
+
+	// Prepare parameters for updating the operator
+	params := operator.UpdateOperatorParams{
+		OperatorID:   int32(id),
+		OperatorName: operatorName,
+		Status:       status,
+	}
+
+	// Perform the update operation
+	operatorID, err := ctrl.db.UpdateOperator(context.Background(), params)
+	if err != nil {
+		ctrl.log.Errorf("Failed to update operator: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update operator"})
+		return
+	}
+
+	// Clear Redis cache
+	ctrl.redisClient.Del(context.Background(), "operators")
+	ctrl.redisClient.Del(context.Background(), "operator:"+strconv.Itoa(id))
+
+	c.JSON(http.StatusOK, gin.H{"operator_id": operatorID})
 }
