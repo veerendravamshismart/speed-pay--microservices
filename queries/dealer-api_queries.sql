@@ -55,3 +55,12 @@ SELECT * FROM tbl_cities WHERE region_id = $1;
 -- Arguments: city_id
 SELECT * FROM tbl_areas WHERE city_id = $1;
 
+-- name: GetAllNumberSeries :many
+-- Get all number series
+-- Retrieves all records from tbl_number_series
+SELECT * FROM tbl_number_series;
+
+-- name: GetAllServiceTypes :many
+-- Get all service types
+-- Retrieves all records from tbl_service_types
+SELECT * FROM tbl_service_types;

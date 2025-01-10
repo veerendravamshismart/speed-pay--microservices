@@ -3,31 +3,32 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 
 	"database/sql"
 
-	"github.com/speedpay/rest"
-	"github.com/speedpay/cmd/operator-service/pkg/operator"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8" // Redis/Dragonfly client
-	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 	_ "github.com/lib/pq"
+	db "github.com/speedpay/internal/db/operator"
+	rest "github.com/speedpay/internal/rest/operator"
 	"go.uber.org/zap"
 )
 
 func main() {
-	// Load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found. Falling back to system environment variables.")
+	viper.SetConfigName("config")              // Name of the config file without extension
+	viper.SetConfigType("yaml")                // Specify the file type
+	viper.AddConfigPath("../../common/config") // Path to look for the config file
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Fatalf("Error reading config file: %v", err)
 	}
 
-	// Get environment variables
-	dbURL := os.Getenv("DATABASE_URL")
-	redisAddr := os.Getenv("REDIS_ADDR") // Dragonfly server address, could be localhost:6379
-	redisPass := os.Getenv("REDIS_PASS") // Dragonfly password (if needed)
-	port := os.Getenv("PORT")
-
+	// Get configurations
+	dbURL := viper.GetString("database.url")
+	redisAddr := viper.GetString("redis.address")
+	redisPass := viper.GetString("redis.password")
+	port := viper.GetString("server.port")
 	// Initialize logger
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
@@ -38,8 +39,6 @@ func main() {
 		Addr:     redisAddr,
 		Password: redisPass, // No password for Redis if empty
 	})
-	
-
 
 	// Test connection to Dragonfly (Redis-compatible)
 	_, err := redisClient.Ping(context.Background()).Result()
@@ -49,14 +48,14 @@ func main() {
 	sugar.Info("Successfully connected to Dragonfly server")
 
 	// Initialize PostgreSQL database connection
-	db, err := sql.Open("postgres", dbURL)
+	dbConn, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		sugar.Fatalf("Failed to connect to the database: %v", err)
 	}
-	defer db.Close()
+	defer dbConn.Close()
 
 	// Initialize sqlc queries
-	queries := operator.New(db)
+	queries := db.New(dbConn)
 
 	// Initialize Gin router
 	router := gin.Default()

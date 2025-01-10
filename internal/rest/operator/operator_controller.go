@@ -17,12 +17,12 @@
 // // operator_controller.go
 
 // type OperatorController struct {
-// 	db          *operator.Queries
+// 	db          *db.Queries
 // 	log         *zap.SugaredLogger
 // 	redisClient *redis.Client
 // }
 
-// func NewOperatorController(db *operator.Queries, log *zap.SugaredLogger, redisClient *redis.Client) *OperatorController {
+// func NewOperatorController(db *db.Queries, log *zap.SugaredLogger, redisClient *redis.Client) *OperatorController {
 // 	return &OperatorController{
 // 		db:          db,
 // 		log:         log,
@@ -41,7 +41,7 @@
 
 // // createOperator creates a new operator in the database
 // func (ctrl *OperatorController) createOperator(c *gin.Context) {
-// 	var req operator.CreateOperatorParams
+// 	var req db.CreateOperatorParams
 // 	if err := c.ShouldBindJSON(&req); err != nil {
 // 		ctrl.log.Errorf("Invalid request: %v", err)
 // 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
@@ -97,7 +97,7 @@
 // 	}
 
 // 	// Cache hit - Deserialize and return the data
-// 	var cachedOperators []operator.TblOperator
+// 	var cachedOperators []db.TblOperator
 // 	if err := json.Unmarshal([]byte(cachedData), &cachedOperators); err != nil {
 // 		ctrl.log.Errorf("Failed to deserialize operators: %v", err)
 // 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operators"})
@@ -144,7 +144,7 @@
 // 		return
 // 	}
 
-// 	var cachedOperator operator.TblOperator
+// 	var cachedOperator db.TblOperator
 // 	if err := json.Unmarshal([]byte(cachedData), &cachedOperator); err != nil {
 // 		ctrl.log.Errorf("Failed to deserialize operator: %v", err)
 // 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operator"})
@@ -186,7 +186,7 @@
 // 		status = sql.NullInt32{Int32: int32(statusInt), Valid: true}
 // 	}
 
-// 	params := operator.UpdateOperatorStatusParams{
+// 	params := db.UpdateOperatorStatusParams{
 // 		Status:     status,
 // 		OperatorID: int32(id),
 // 	}
@@ -245,7 +245,7 @@
 // 	}
 
 // 	// Prepare parameters for updating the operator
-// 	params := operator.UpdateOperatorParams{
+// 	params := db.UpdateOperatorParams{
 // 		OperatorID:   int32(id),
 // 		OperatorName: operatorName,
 // 		Status:       status,
@@ -278,19 +278,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8" // Redis/Dragonfly client
-	"github.com/speedpay/cmd/operator-service/pkg/operator"
+	"github.com/speedpay/internal/db/operator"
 	"go.uber.org/zap"
 )
 
 // operator_controller.go
 
 type OperatorController struct {
-	db          *operator.Queries
+	db          *db.Queries
 	log         *zap.SugaredLogger
 	redisClient *redis.Client
 }
 
-func NewOperatorController(db *operator.Queries, log *zap.SugaredLogger, redisClient *redis.Client) *OperatorController {
+func NewOperatorController(db *db.Queries, log *zap.SugaredLogger, redisClient *redis.Client) *OperatorController {
 	return &OperatorController{
 		db:          db,
 		log:         log,
@@ -309,7 +309,7 @@ func (ctrl *OperatorController) RegisterRoutes(router *gin.Engine) {
 
 // createOperator creates a new operator in the database
 func (ctrl *OperatorController) createOperator(c *gin.Context) {
-	var req operator.CreateOperatorParams
+	var req db.CreateOperatorParams
 	if err := c.ShouldBindJSON(&req); err != nil {
 		ctrl.log.Errorf("Invalid request: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
@@ -366,7 +366,7 @@ func (ctrl *OperatorController) getAllOperators(c *gin.Context) {
 
 	// Cache hit - Deserialize and return the data
 	ctrl.log.Info("Cache hit for operators")
-	var cachedOperators []operator.TblOperator
+	var cachedOperators []db.TblOperator
 	if err := json.Unmarshal([]byte(cachedData), &cachedOperators); err != nil {
 		ctrl.log.Errorf("Failed to deserialize operators: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operators"})
@@ -417,7 +417,7 @@ func (ctrl *OperatorController) getOperatorByID(c *gin.Context) {
 
 	// Cache hit - Deserialize and return the data
 	ctrl.log.Infof("Cache hit for operator ID: %d", id)
-	var cachedOperator operator.TblOperator
+	var cachedOperator db.TblOperator
 	if err := json.Unmarshal([]byte(cachedData), &cachedOperator); err != nil {
 		ctrl.log.Errorf("Failed to deserialize operator: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deserialize operator"})
@@ -459,7 +459,7 @@ func (ctrl *OperatorController) updateOperatorStatus(c *gin.Context) {
 		status = sql.NullInt32{Int32: int32(statusInt), Valid: true}
 	}
 
-	params := operator.UpdateOperatorStatusParams{
+	params := db.UpdateOperatorStatusParams{
 		Status:     status,
 		OperatorID: int32(id),
 	}
@@ -518,7 +518,7 @@ func (ctrl *OperatorController) updateOperator(c *gin.Context) {
 	}
 
 	// Prepare parameters for updating the operator
-	params := operator.UpdateOperatorParams{
+	params := db.UpdateOperatorParams{
 		OperatorID:   int32(id),
 		OperatorName: operatorName,
 		Status:       status,

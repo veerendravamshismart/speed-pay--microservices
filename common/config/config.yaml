@@ -7,3 +7,6 @@ redis:
 
 server:
   port: 8081
+  
+jwt:
+  jwt-secret: "example_secret_key"

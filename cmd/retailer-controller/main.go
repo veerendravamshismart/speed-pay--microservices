@@ -7,16 +7,13 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
-	db "github.com/speedpay/internal/db/dealer-api"
-	db1 "github.com/speedpay/internal/db/helper"
-	rest "github.com/speedpay/internal/rest/masterdata"
-
-	"github.com/go-redis/redis/v8" // Redis client
-	"github.com/speedpay/internal/middleware"
+	"github.com/go-redis/redis/v8"
+	db "github.com/speedpay/internal/db/retailer"
+	rest "github.com/speedpay/internal/rest/retailer"
 	"github.com/spf13/viper"
-
-	_ "github.com/lib/pq"
 	"go.uber.org/zap"
+
+	_ "github.com/lib/pq" // Import PostgreSQL driver
 )
 
 func main() {
@@ -34,10 +31,6 @@ func main() {
 	redisAddr := viper.GetString("redis.address")
 	redisPass := viper.GetString("redis.password")
 	port := viper.GetString("server.port")
-
-	if port == "" {
-		port = "8080" // Default port if not set
-	}
 
 	// Initialize logger
 	logger, _ := zap.NewProduction()
@@ -64,19 +57,15 @@ func main() {
 
 	// Initialize sqlc queries
 	queries := db.New(dbConn)
-	queries1 := db1.New(dbConn)
 
 	// Initialize the REST server
 	router := gin.Default()
 
-	router.Use(middleware.JWTMiddleware(*queries1))
-
-	// Register the routes based on the modified ones you wanted
 	rest.NewServer(queries, sugar, redisClient).RegisterRoutes(router)
 
-	// Register routes and start the Gin server
-	sugar.Infof("Starting server on port %s", port)
+	// Start the Gin server
 	if err := router.Run(":" + port); err != nil {
 		sugar.Fatalf("Failed to start server: %v", err)
 	}
+
 }

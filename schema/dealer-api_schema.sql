@@ -52,3 +52,26 @@ CREATE TABLE tbl_areas (
     PRIMARY KEY (area_id),
     FOREIGN KEY (city_id) REFERENCES tbl_cities (city_id)
 );
+-- Table for service types
+CREATE TABLE tbl_service_types (
+    service_type_id integer NOT NULL,
+    service_type_name character varying(255),
+    service_type_code character varying(45),
+    inserted_date timestamp,
+    inserted_user integer,
+    last_modified_date timestamp,
+    last_modified_user integer,
+    remarks character varying(255),
+    status integer NOT NULL DEFAULT 0,
+    sync_code1 character varying(100),
+    sync_codes character varying(255),
+    PRIMARY KEY (service_type_id)
+);
+
+-- Table for number series
+CREATE TABLE tbl_number_series (
+    number_series_id SERIAL PRIMARY KEY,
+    operator_id integer,
+    number_series integer,
+    status integer
+);

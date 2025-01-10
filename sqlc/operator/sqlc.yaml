@@ -1,0 +1,14 @@
+# sqlc/sqlc.yaml
+
+version: 2
+sql:
+  - schema:
+      - "../../schema/operator_schema.sql"  # Schema definition for productcontroller
+    queries:
+      - "../../queries/operator_queries.sql"  # Queries for productcontroller
+    engine: "postgresql"
+    gen:
+      go:
+        package: "db"
+        out: "../../internal/db/operator"
+       
